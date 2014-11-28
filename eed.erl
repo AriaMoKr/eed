@@ -12,9 +12,10 @@ fileed(Lines, Cursor) ->
       From ! {self(), ok},
       {A, B} = lists:split(Cursor, Lines),
       fileed(A ++ [Line] ++ B, Cursor + 1);
-    {From, {pop, _}} ->
+    {From, {delete, _}} ->
       From ! {self(), ok},
-      fileed(lists:sublist(Lines, length(Lines)-1), Cursor);
+      {A, [_|B]} = lists:split(Cursor-1, Lines),
+      fileed(A ++ B, Cursor);
     {From, {list, _}} ->
       From ! {self(), Lines},
       fileed(Lines, Cursor);
@@ -37,50 +38,41 @@ fileed(Lines, Cursor) ->
 start() ->
   spawn(?MODULE, fileed, [[], 0]).
 
-append(Pid, Line) ->
-  Pid ! {self(), {append, Line}},
-  receive
-    {Pid, Msg} -> Msg
-  after 3000 -> timeout
+sendRecv(Pid, Cmd) ->
+  sendRecv(Pid, Cmd, undef).
+sendRecv(Pid, Cmd, Arg) ->
+  Pid ! {self(), {Cmd, Arg}},
+  receive {Pid, Msg} -> Msg
+  after 2000 -> timeout
   end.
+
+%append(Pid, Line) ->
+%  sendRecv(Pid, append, Line).
+
+delete(Pid) ->
+  sendRecv(Pid, delete).
+
+list(Pid) ->
+  sendRecv(Pid, list).
+
+print(Pid) ->
+  sendRecv(Pid, print).
+
+lineCount(Pid) ->
+  sendRecv(Pid, lineCount).
+
+setLineNumber(Pid, Num) ->
+  sendRecv(Pid, setLineNumber, Num).
+
 
 append(Pid) ->
   L = io:get_line(""),
   case L of
     ".\n" -> quit;
-    _ -> append(Pid, L),
+    _ -> sendRecv(Pid, append, L),
          append(Pid)
   end.
 
-pop(Pid) ->
-  Pid ! {self(), {pop, undef}},
-  receive
-    {Pid, Msg} -> Msg
-  after 3000 -> timeout
-  end.
-
-list(Pid) ->
-  Pid ! {self(), {list, undef}},
-  receive
-    {Pid, Msg} -> Msg
-  after 3000 -> timeout
-  end.
-
-printall(Pid) -> io:format(list(Pid)).
-
-print(Pid) ->
-  Pid ! {self(), {print, undef}},
-  receive
-    {Pid, Msg} -> io:format(Msg)
-  after 3000 -> timeout
-  end.
-
-lineCount(Pid) ->
-  Pid ! {self(), {lineCount, undef}},
-  receive
-    {Pid, Msg} -> Msg
-  after 3000 -> timeout
-  end.
 
 test() ->
   E = start(),
@@ -102,27 +94,22 @@ getnum(String) ->
 numValid(E, Num) ->
   (Num > 0) and (Num =< lineCount(E)).
 
-setLineNum(Pid, Num) ->
-  Pid ! {self(), {setLineNumber, Num}},
-  receive
-    {Pid, Msg} -> Msg
-  after 3000 -> timeout
-  end.
-
 getcmd(E) ->
   L = chomp(io:get_line(prompt())),
   case L of
     "q" -> {quit, E};
     "a" -> append(E),
-             getcmd(E);
-    ",p" -> printall(E),
-              getcmd(E);
-    "p" -> print(E),
-             getcmd(E);
+           getcmd(E);
+    ",p" -> io:format("~s", [list(E)]),
+            getcmd(E);
+    "p" -> io:format("~s", [print(E)]),
+           getcmd(E);
+    "d" -> delete(E),
+           getcmd(E);
     _ -> Num = getnum(L),
          NumValid = numValid(E, Num),
          if NumValid ->
-              setLineNum(E, Num),
+              setLineNumber(E, Num),
               getcmd(E);
             true ->
               unknown(),
