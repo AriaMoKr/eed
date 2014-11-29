@@ -29,6 +29,9 @@ fileed(Lines, Cursor) ->
     {From, {setLineNumber, Num}} ->
       From ! {self(), ok},
       fileed(Lines, Num);
+    {From, {getLineNumber, undef}} ->
+      From ! {self(), Cursor},
+      fileed(Lines, Cursor);
     terminate -> ok
   end.
 
@@ -77,9 +80,16 @@ runcmd(E, L) ->
     ",p" -> {ok, sendRecv(E, list)};
     "p" -> {ok, sendRecv(E, print)};
     "d" -> sendRecv(E, delete), {ok, ""};
+    "+" -> N = sendRecv(E, getLineNumber),
+           sendRecv(E, setLineNumber, N + 1),
+           {ok, sendRecv(E, print)};
+    "-" -> N = sendRecv(E, getLineNumber),
+           sendRecv(E, setLineNumber, N - 1),
+           {ok, sendRecv(E, print)};
     _ -> Num = getnum(L),
          NumValid = numValid(E, Num),
-         if NumValid -> sendRecv(E, setLineNumber, Num);
+         if NumValid -> sendRecv(E, setLineNumber, Num),
+                        {ok, sendRecv(E, print)};
             true -> {error, unknown()}
          end
   end.
@@ -98,11 +108,11 @@ run() ->
 test() ->
   E = start(),
   %[] = sendRecv(E, list),
-  {ok, []} = runcmd(E, ",p"),
+  {ok, ""} = runcmd(E, ",p"),
 
   %{ok, ["asdf"]} = runcmd(E, "a"),
   %would need to handle input programmatically, maybe mode in runcmd or use an iobuffer
-  %use sendRecv temporarily
+  %use sendRecv instead
   ok = sendRecv(E, append, "asdf"),
   {ok, "asdf"} = runcmd(E, "p"),
   {ok, ["asdf"]} = runcmd(E, ",p"),
@@ -111,7 +121,16 @@ test() ->
   {ok, "1234"} = runcmd(E, "p"),
   {ok, ["asdf", "1234"]} = runcmd(E, ",p"),
 
+  {ok, "asdf"} = runcmd(E, "-"),
+  {ok, "1234"} = runcmd(E, "+"),
+
   {ok, "asdf"} = runcmd(E, "1"),
+  {ok, ""} = runcmd(E, "d"),
+
+  {ok, "1234"} = runcmd(E, "p"),
+  {ok, ["1234"]} = runcmd(E, ",p"),
+
+  {ok, ""} = runcmd(E, "d"),
 
   ok.
 
