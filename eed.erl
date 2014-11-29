@@ -46,6 +46,7 @@ sendRecv(Pid, Cmd, Arg) ->
     after 2000 -> timeout
   end.
 
+%TODO move append functionality to runcmd with mode
 append(Pid) ->
   L = io:get_line(""),
   case L of
@@ -71,23 +72,23 @@ numValid(E, Num) ->
 
 runcmd(E, L) ->
   case L of
-    "q" -> quit;
-    "a" -> append(E);
-    ",p" -> io:format("~s", [sendRecv(E, list)]);
-    "p" -> io:format("~s", [sendRecv(E, print)]);
-    "d" -> sendRecv(E, delete);
+    "q" -> {quit, ""};
+    "a" -> append(E), {ok, ""};
+    ",p" -> {ok, sendRecv(E, list)};
+    "p" -> {ok, sendRecv(E, print)};
+    "d" -> sendRecv(E, delete), {ok, ""};
     _ -> Num = getnum(L),
          NumValid = numValid(E, Num),
          if NumValid -> sendRecv(E, setLineNumber, Num);
-            true -> unknown()
+            true -> {error, unknown()}
          end
   end.
 
 cmdloop(E) ->
   Cmd = chomp(io:get_line(prompt())),
-  R = runcmd(E, Cmd),
-  if R == quit -> R;
-    true -> cmdloop(E)
+  {R, Msg} = runcmd(E, Cmd),
+  if R == quit -> quit;
+    true -> io:format("~s", [Msg]), cmdloop(E)
   end.
 
 run() ->
@@ -96,6 +97,21 @@ run() ->
 
 test() ->
   E = start(),
-  [] = sendRecv(E, list),
+  %[] = sendRecv(E, list),
+  {ok, []} = runcmd(E, ",p"),
+
+  %{ok, ["asdf"]} = runcmd(E, "a"),
+  %would need to handle input programmatically, maybe mode in runcmd or use an iobuffer
+  %use sendRecv temporarily
+  ok = sendRecv(E, append, "asdf"),
+  {ok, "asdf"} = runcmd(E, "p"),
+  {ok, ["asdf"]} = runcmd(E, ",p"),
+
+  ok = sendRecv(E, append, "1234"),
+  {ok, "1234"} = runcmd(E, "p"),
+  {ok, ["asdf", "1234"]} = runcmd(E, ",p"),
+
+  {ok, "asdf"} = runcmd(E, "1"),
+
   ok.
 
