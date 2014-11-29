@@ -14,7 +14,9 @@ fileed(Lines, Cursor) ->
     {From, {delete, undef}} ->
       From ! {self(), ok},
       {A, [_|B]} = lists:split(Cursor-1, Lines),
-      fileed(A ++ B, Cursor);
+      NewLines = A ++ B,
+      NewCursor = min(Cursor, length(NewLines)),
+      fileed(NewLines, NewCursor);
     {From, {list, undef}} ->
       From ! {self(), Lines},
       fileed(Lines, Cursor);
@@ -30,8 +32,10 @@ fileed(Lines, Cursor) ->
     terminate -> ok
   end.
 
+init() -> [[], 0].
+
 start() ->
-  spawn(?MODULE, fileed, [[], 0]).
+  spawn(?MODULE, fileed, init()).
 
 sendRecv(Pid, Cmd) ->
   sendRecv(Pid, Cmd, undef).
