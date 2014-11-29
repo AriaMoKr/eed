@@ -3,7 +3,6 @@
 % Ed tutorial: http://linuxclues.blogspot.com/2012/09/ed-tutorial-line-editor-unix.html
 
 -module(eed).
-
 -compile([debug_info, export_all]).
 
 fileed(Lines, Cursor) ->
@@ -12,27 +11,23 @@ fileed(Lines, Cursor) ->
       From ! {self(), ok},
       {A, B} = lists:split(Cursor, Lines),
       fileed(A ++ [Line] ++ B, Cursor + 1);
-    {From, {delete, _}} ->
+    {From, {delete, undef}} ->
       From ! {self(), ok},
       {A, [_|B]} = lists:split(Cursor-1, Lines),
       fileed(A ++ B, Cursor);
-    {From, {list, _}} ->
+    {From, {list, undef}} ->
       From ! {self(), Lines},
       fileed(Lines, Cursor);
-    {From, {dump, _}} ->
-      From ! {self(), {Lines, Cursor}},
-      fileed(Lines, Cursor);
-    {From, {print, _}} ->
+    {From, {print, undef}} ->
       From ! {self(), lists:nth(Cursor, Lines)},
       fileed(Lines, Cursor);
-    {From, {lineCount, _}} ->
+    {From, {lineCount, undef}} ->
       From ! {self(), length(Lines)},
       fileed(Lines, Cursor);
     {From, {setLineNumber, Num}} ->
       From ! {self(), ok},
       fileed(Lines, Num);
-    terminate ->
-      ok
+    terminate -> ok
   end.
 
 start() ->
@@ -42,8 +37,9 @@ sendRecv(Pid, Cmd) ->
   sendRecv(Pid, Cmd, undef).
 sendRecv(Pid, Cmd, Arg) ->
   Pid ! {self(), {Cmd, Arg}},
-  receive {Pid, Msg} -> Msg
-  after 2000 -> timeout
+  receive
+    {Pid, Msg} -> Msg
+    after 2000 -> timeout
   end.
 
 append(Pid) ->
@@ -54,22 +50,17 @@ append(Pid) ->
          append(Pid)
   end.
 
-test() ->
-  E = start(),
-  [] = sendRecv(E, list),
-  ok.
+unknown() -> io:format("?~n").
 
-unknown() ->
-  io:format("?~n").
-
-prompt() ->
-  "*".
+prompt() -> "*".
 
 chomp(String) ->
   re:replace(String, "(^\\s+)|(\\s+$)", "", [global, {return,list}]).
 
 getnum(String) ->
-  try erlang:list_to_integer(String) catch error:_Ex -> 0 end.
+  try erlang:list_to_integer(String)
+    catch error:_Ex -> 0
+  end.
 
 numValid(E, Num) ->
   (Num > 0) and (Num =< sendRecv(E, lineCount)).
@@ -83,10 +74,8 @@ runcmd(E, L) ->
     "d" -> sendRecv(E, delete);
     _ -> Num = getnum(L),
          NumValid = numValid(E, Num),
-         if NumValid ->
-              sendRecv(E, setLineNumber, Num);
-            true ->
-              unknown()
+         if NumValid -> sendRecv(E, setLineNumber, Num);
+            true -> unknown()
          end
   end.
 
@@ -100,4 +89,9 @@ cmdloop(E) ->
 run() ->
   E = start(),
   cmdloop(E).
+
+test() ->
+  E = start(),
+  [] = sendRecv(E, list),
+  ok.
 
