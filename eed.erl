@@ -46,25 +46,6 @@ sendRecv(Pid, Cmd, Arg) ->
   after 2000 -> timeout
   end.
 
-%append(Pid, Line) ->
-%  sendRecv(Pid, append, Line).
-
-delete(Pid) ->
-  sendRecv(Pid, delete).
-
-list(Pid) ->
-  sendRecv(Pid, list).
-
-print(Pid) ->
-  sendRecv(Pid, print).
-
-lineCount(Pid) ->
-  sendRecv(Pid, lineCount).
-
-setLineNumber(Pid, Num) ->
-  sendRecv(Pid, setLineNumber, Num).
-
-
 append(Pid) ->
   L = io:get_line(""),
   case L of
@@ -73,10 +54,9 @@ append(Pid) ->
          append(Pid)
   end.
 
-
 test() ->
   E = start(),
-  [] = list(E),
+  [] = sendRecv(E, list),
   ok.
 
 unknown() ->
@@ -92,7 +72,7 @@ getnum(String) ->
   try erlang:list_to_integer(String) catch error:_Ex -> 0 end.
 
 numValid(E, Num) ->
-  (Num > 0) and (Num =< lineCount(E)).
+  (Num > 0) and (Num =< sendRecv(E, lineCount)).
 
 getcmd(E) ->
   L = chomp(io:get_line(prompt())),
@@ -100,16 +80,16 @@ getcmd(E) ->
     "q" -> {quit, E};
     "a" -> append(E),
            getcmd(E);
-    ",p" -> io:format("~s", [list(E)]),
+    ",p" -> io:format("~s", [sendRecv(E, list)]),
             getcmd(E);
-    "p" -> io:format("~s", [print(E)]),
+    "p" -> io:format("~s", [sendRecv(E, print)]),
            getcmd(E);
-    "d" -> delete(E),
+    "d" -> sendRecv(E, delete),
            getcmd(E);
     _ -> Num = getnum(L),
          NumValid = numValid(E, Num),
          if NumValid ->
-              setLineNumber(E, Num),
+              sendRecv(E, setLineNumber, Num),
               getcmd(E);
             true ->
               unknown(),
