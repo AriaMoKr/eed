@@ -49,7 +49,7 @@ sendRecv(Pid, Cmd, Arg) ->
 append(Pid) ->
   L = io:get_line(""),
   case L of
-    ".\n" -> quit;
+    ".\n" -> finishedAppend;
     _ -> sendRecv(Pid, append, L),
          append(Pid)
   end.
@@ -74,30 +74,30 @@ getnum(String) ->
 numValid(E, Num) ->
   (Num > 0) and (Num =< sendRecv(E, lineCount)).
 
-getcmd(E) ->
-  L = chomp(io:get_line(prompt())),
+runcmd(E, L) ->
   case L of
-    "q" -> {quit, E};
-    "a" -> append(E),
-           getcmd(E);
-    ",p" -> io:format("~s", [sendRecv(E, list)]),
-            getcmd(E);
-    "p" -> io:format("~s", [sendRecv(E, print)]),
-           getcmd(E);
-    "d" -> sendRecv(E, delete),
-           getcmd(E);
+    "q" -> quit;
+    "a" -> append(E);
+    ",p" -> io:format("~s", [sendRecv(E, list)]);
+    "p" -> io:format("~s", [sendRecv(E, print)]);
+    "d" -> sendRecv(E, delete);
     _ -> Num = getnum(L),
          NumValid = numValid(E, Num),
          if NumValid ->
-              sendRecv(E, setLineNumber, Num),
-              getcmd(E);
+              sendRecv(E, setLineNumber, Num);
             true ->
-              unknown(),
-              getcmd(E)
+              unknown()
          end
+  end.
+
+cmdloop(E) ->
+  Cmd = chomp(io:get_line(prompt())),
+  R = runcmd(E, Cmd),
+  if R == quit -> R;
+    true -> cmdloop(E)
   end.
 
 run() ->
   E = start(),
-  getcmd(E).
+  cmdloop(E).
 
