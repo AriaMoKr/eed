@@ -58,7 +58,7 @@ append(Pid) ->
          append(Pid)
   end.
 
-unknown() -> io:format("?~n").
+unknown() -> "?\n".
 
 prompt() -> "*".
 
@@ -67,7 +67,7 @@ chomp(String) ->
 
 getnum(String) ->
   try erlang:list_to_integer(String)
-    catch error:_Ex -> 0
+    catch error:badarg -> 0
   end.
 
 numValid(E, Num) ->
