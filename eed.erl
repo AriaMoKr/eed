@@ -1,7 +1,3 @@
-% EEd - a minimal Erlang based Ed.
-%
-% Ed tutorial: http://linuxclues.blogspot.com/2012/09/ed-tutorial-line-editor-unix.html
-
 -module(eed).
 -compile([debug_info, export_all]).
 
@@ -35,27 +31,25 @@ fileed(Lines, Cursor) ->
     terminate -> ok
   end.
 
-init() -> [[], 0].
-
 start() ->
-  spawn(?MODULE, fileed, init()).
+  spawn(?MODULE, fileed, [[], 0]).
 
-sendRecv(Pid, Cmd) ->
-  sendRecv(Pid, Cmd, undef).
-sendRecv(Pid, Cmd, Arg) ->
-  Pid ! {self(), {Cmd, Arg}},
+sendRecv(Eed, Cmd) ->
+  sendRecv(Eed, Cmd, undef).
+sendRecv(Eed, Cmd, Arg) ->
+  Eed ! {self(), {Cmd, Arg}},
   receive
-    {Pid, Msg} -> Msg
+    {Eed, Msg} -> Msg
     after 2000 -> timeout
   end.
 
 %TODO move append functionality to runcmd with mode
-append(Pid) ->
+append(Eed) ->
   L = io:get_line(""),
   case L of
     ".\n" -> finishedAppend;
-    _ -> sendRecv(Pid, append, L),
-         append(Pid)
+    _ -> sendRecv(Eed, append, L),
+         append(Eed)
   end.
 
 unknown() -> "?\n".
@@ -70,67 +64,90 @@ getnum(String) ->
     catch error:badarg -> 0
   end.
 
-numValid(E, Num) ->
-  (Num > 0) and (Num =< sendRecv(E, lineCount)).
+linenumValid(Eed, Num) ->
+  (Num > 0) and (Num =< sendRecv(Eed, lineCount)).
 
-runcmd(E, L) ->
-  case L of
-    "q" -> {quit, ""};
-    "a" -> append(E), {ok, ""};
-    ",p" -> {ok, sendRecv(E, list)};
-    "p" -> {ok, sendRecv(E, print)};
-    "d" -> sendRecv(E, delete), {ok, ""};
-    "+" -> N = sendRecv(E, getLineNumber),
-           sendRecv(E, setLineNumber, N + 1),
-           {ok, sendRecv(E, print)};
-    "-" -> N = sendRecv(E, getLineNumber),
-           sendRecv(E, setLineNumber, N - 1),
-           {ok, sendRecv(E, print)};
-    _ -> Num = getnum(L),
-         NumValid = numValid(E, Num),
-         if NumValid -> sendRecv(E, setLineNumber, Num),
-                        {ok, sendRecv(E, print)};
-            true -> {error, unknown()}
-         end
+setLineNumber(Eed, Num) ->
+  NumValid = linenumValid(Eed, Num),
+  if NumValid -> sendRecv(Eed, setLineNumber, Num),
+                 {ok, sendRecv(Eed, print)};
+     true -> {err, unknown()}
   end.
 
-cmdloop(E) ->
+delete(Eed) ->
+  NumValid = linenumValid(Eed, sendRecv(Eed, getLineNumber)),
+  if NumValid -> sendRecv(Eed, delete), {ok, ""};
+     true -> {err, unknown()}
+  end.
+
+printAll(Eed) ->
+  NumValid = linenumValid(Eed, sendRecv(Eed, getLineNumber)),
+  if NumValid -> {ok, sendRecv(Eed, list)};
+     true -> {error, unknown()}
+  end.
+
+print(Eed, _Address) ->
+  NumValid = linenumValid(Eed, sendRecv(Eed, getLineNumber)),
+  if NumValid -> {ok, sendRecv(Eed, print)};
+     true -> {error, unknown()}
+  end.
+
+% [address [,address]]command[parameters] - from GNU Ed Manual
+runcmd(Eed, Command) ->
+  {match,[[A,C,_E,O], _]} = re:run(Command,"([[:digit:]]*)([,]?)([[:digit:]]*)([[:alpha:]+-]?)",[global,{capture,all_but_first,list}]),
+
+  % io:format("~p~n", [{A,C,O}]),
+
+  case {A,C,O} of
+    {_, _, "q"} -> {quit, ""};
+    {A, _, "a"} -> append(Eed), {ok, ""};
+    {A, ",", "p"} -> printAll(Eed);
+    {A, _, "p"} -> print(Eed, getnum(A));
+    {A, _, "d"} -> delete(Eed);
+    {A, _, "+"} -> setLineNumber(Eed, sendRecv(Eed, getLineNumber) + 1);
+    {A, _, "-"} -> setLineNumber(Eed, sendRecv(Eed, getLineNumber) - 1);
+    {"", _, ""} -> setLineNumber(Eed, sendRecv(Eed, getLineNumber) + 1);
+    {A, _, O} -> setLineNumber(Eed, getnum(A))
+  end.
+
+cmdloop(Eed) ->
   Cmd = chomp(io:get_line(prompt())),
-  {R, Msg} = runcmd(E, Cmd),
+  {R, Msg} = runcmd(Eed, Cmd),
   if R == quit -> quit;
-    true -> io:format("~s", [Msg]), cmdloop(E)
+    true -> io:format("~s", [Msg]), cmdloop(Eed)
   end.
 
 run() ->
-  E = start(),
-  cmdloop(E).
+  Eed = start(),
+  cmdloop(Eed).
 
 test() ->
-  E = start(),
-  %[] = sendRecv(E, list),
-  {ok, ""} = runcmd(E, ",p"),
+  Eed = start(),
 
-  %{ok, ["asdf"]} = runcmd(E, "a"),
-  %would need to handle input programmatically, maybe mode in runcmd or use an iobuffer
-  %use sendRecv instead
-  ok = sendRecv(E, append, "asdf"),
-  {ok, "asdf"} = runcmd(E, "p"),
-  {ok, ["asdf"]} = runcmd(E, ",p"),
+  ok = sendRecv(Eed, append, "asdf"),
+  {ok, "asdf"} = runcmd(Eed, "p"),
+  {ok, ["asdf"]} = runcmd(Eed, ",p"),
+  {ok, "asdf"} = runcmd(Eed, "1p"),
 
-  ok = sendRecv(E, append, "1234"),
-  {ok, "1234"} = runcmd(E, "p"),
-  {ok, ["asdf", "1234"]} = runcmd(E, ",p"),
+  ok = sendRecv(Eed, append, "1234"),
+  {ok, "1234"} = runcmd(Eed, "p"),
+  {ok, "1234"} = runcmd(Eed, "2p"),
+  
+  %{ok, "asdf"} = runcmd(Eed, "1p"),
 
-  {ok, "asdf"} = runcmd(E, "-"),
-  {ok, "1234"} = runcmd(E, "+"),
+  {ok, ["asdf", "1234"]} = runcmd(Eed, ",p"),
+  %{ok, ["asdf", "1234"]} = runcmd(Eed, "1,2p"),
 
-  {ok, "asdf"} = runcmd(E, "1"),
-  {ok, ""} = runcmd(E, "d"),
+  {ok, "asdf"} = runcmd(Eed, "-"),
+  {ok, "1234"} = runcmd(Eed, "+"),
 
-  {ok, "1234"} = runcmd(E, "p"),
-  {ok, ["1234"]} = runcmd(E, ",p"),
+  {ok, "asdf"} = runcmd(Eed, "1"),
+  {ok, ""} = runcmd(Eed, "d"),
 
-  {ok, ""} = runcmd(E, "d"),
+  {ok, "1234"} = runcmd(Eed, "p"),
+  {ok, ["1234"]} = runcmd(Eed, ",p"),
+
+  {ok, ""} = runcmd(Eed, "d"),
 
   ok.
 
