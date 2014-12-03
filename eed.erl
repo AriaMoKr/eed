@@ -66,6 +66,10 @@ getnum(String) ->
 linenumValid(Eed, Num) ->
   (Num > 0) and (Num =< sendRecv(Eed, lineCount)).
 
+setLineNumber(Eed, {"", _C, _E}) ->
+  setLineNumber(Eed, sendRecv(Eed, getLineNumber) + 1);
+setLineNumber(Eed, {A, _C, _E}) ->
+  setLineNumber(Eed, getnum(A));
 setLineNumber(Eed, Num) ->
   NumValid = linenumValid(Eed, Num),
   if NumValid -> sendRecv(Eed, setLineNumber, Num),
@@ -87,6 +91,8 @@ printAll(Eed) ->
 
 print(Eed, {A, C, E}) ->
   print(Eed, A, C, E).
+print(Eed, "", ",", "") ->
+  printAll(Eed);
 print(Eed, "", "", "") ->
   CurLine = sendRecv(Eed, getLineNumber),
   print(Eed, CurLine, CurLine);
@@ -104,16 +110,16 @@ print(Eed, Address, _E) ->
 runcmd(Eed, Command) ->
   {match,[[A,C,E,O], _]} = re:run(Command,"([[:digit:]]*)(,?)([[:digit:]]*)([[:alpha:]+-]?)",[global,{capture,all_but_first,list}]),
 
-  case {A,C,E,O} of
-    {_, _, _, "q"} -> {quit, ""};
-    {A, _, _, "a"} -> append(Eed), {ok, ""};
-    {A, ",", _, "p"} -> printAll(Eed);
-    {A, _, E, "p"} -> print(Eed, {A, C, E});
-    {A, _, _, "d"} -> delete(Eed);
-    {A, _, _, "+"} -> setLineNumber(Eed, sendRecv(Eed, getLineNumber) + 1);
-    {A, _, _, "-"} -> setLineNumber(Eed, sendRecv(Eed, getLineNumber) - 1);
-    {"", _, _, ""} -> setLineNumber(Eed, sendRecv(Eed, getLineNumber) + 1);
-    {A, _, _, O} -> setLineNumber(Eed, getnum(A))
+  Range = {A, C, E},
+
+  case O of
+    "q" -> {quit, ""};
+    "p" -> print(Eed, Range);
+    "a" -> append(Eed), {ok, ""};
+    "d" -> delete(Eed);
+    "+" -> setLineNumber(Eed, sendRecv(Eed, getLineNumber) + 1);
+    "-" -> setLineNumber(Eed, sendRecv(Eed, getLineNumber) - 1);
+    _ -> setLineNumber(Eed, Range)
   end.
 
 cmdloop(Eed) ->
@@ -143,7 +149,7 @@ test() ->
 
   {ok, ["asdf", "1234"]} = runcmd(Eed, ",p"),
   {ok, "1234"} = runcmd(Eed, "2"),
-  {ok, ["asdf", "1234"]} = runcmd(Eed, "1,2p"),
+  %{ok, ["asdf", "1234"]} = runcmd(Eed, "1,2p"),
   
   {ok, "1234"} = runcmd(Eed, "2"),
 
