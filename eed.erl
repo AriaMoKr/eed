@@ -13,9 +13,6 @@ fileed(Lines, Cursor) ->
       NewLines = A ++ B,
       NewCursor = min(Cursor, length(NewLines)),
       fileed(NewLines, NewCursor);
-    {From, {list, undef}} ->
-      From ! {self(), Lines},
-      fileed(Lines, Cursor);
     {From, {print, undef}} ->
       From ! {self(), lists:nth(Cursor, Lines)},
       fileed(Lines, Cursor);
@@ -43,10 +40,12 @@ sendRecv(Eed, Cmd, Arg) ->
     after 2000 -> timeout
   end.
 
+append(Eed, _Range) ->
+  append(Eed).
 append(Eed) ->
   L = io:get_line(""),
   case L of
-    ".\n" -> finishedAppend;
+    ".\n" -> {ok, ""};
     _ -> sendRecv(Eed, append, L),
          append(Eed)
   end.
@@ -73,52 +72,82 @@ setLineNumber(Eed, {A, _C, _E}) ->
 setLineNumber(Eed, Num) ->
   NumValid = linenumValid(Eed, Num),
   if NumValid -> sendRecv(Eed, setLineNumber, Num),
-                 {ok, sendRecv(Eed, print)};
+                 {ok, [sendRecv(Eed, print)]};
      true -> {err, unknown()}
   end.
 
+delete(Eed, _Range) ->
+  delete(Eed).
 delete(Eed) ->
   NumValid = linenumValid(Eed, sendRecv(Eed, getLineNumber)),
   if NumValid -> sendRecv(Eed, delete), {ok, ""};
      true -> {err, unknown()}
   end.
 
-printAll(Eed) ->
-  NumValid = linenumValid(Eed, sendRecv(Eed, getLineNumber)),
-  if NumValid -> {ok, sendRecv(Eed, list)};
+print(Eed, {A, E}) ->
+  AValid = linenumValid(Eed, sendRecv(Eed, getLineNumber)),
+  EValid = linenumValid(Eed, sendRecv(Eed, getLineNumber)),
+  if AValid, EValid, A =< E -> print(Eed, A, E, validated);
      true -> {error, unknown()}
-  end.
+  end;
+print(Eed, A) ->
+  print(Eed, {A, A}).
 
-print(Eed, {A, C, E}) ->
-  print(Eed, A, C, E).
-print(Eed, "", ",", "") ->
-  printAll(Eed);
-print(Eed, "", "", "") ->
-  CurLine = sendRecv(Eed, getLineNumber),
-  print(Eed, CurLine, CurLine);
-print(Eed, Address, _C, _E) when is_list(Address) ->
-  print(Eed, getnum(Address), "").
-print(Eed, Address, _E) ->
-  NumValid = linenumValid(Eed, Address),
-  if NumValid -> 
-       setLineNumber(Eed, Address),
-       {ok, sendRecv(Eed, print)};
-     true -> {error, unknown()}
-  end.
+print(Eed, A, A, validated) -> 
+  setLineNumber(Eed, A),
+  {ok, [sendRecv(Eed, print)]};
+print(Eed, A, E, validated) ->
+  {ok, LinesA} = print(Eed, A, A, validated),
+  {ok, LinesB} = print(Eed, A+1, E, validated),
+  {ok, LinesA ++ LinesB}.
+
+quit(_Eed, {"", "", ""}) ->
+  {quit, ""};
+quit(_Eed, {_A, _C, _E}) ->
+  {error, unknown()}.
+
+incLine(Eed, _Range) ->
+  setLineNumber(Eed, sendRecv(Eed, getLineNumber) + 1).
+
+decLine(Eed, _Range) ->
+  setLineNumber(Eed, sendRecv(Eed, getLineNumber) - 1).
+
+getLineRef(Eed, ".") ->
+  sendRecv(Eed, getLineNumber);
+getLineRef(Eed, "$") ->
+  sendRecv(Eed, lineCount);
+getLineRef(_Eed, Num) ->
+  getnum(Num).
+
+convertRange(Eed, {"", "", ""}) ->
+  convertRange(Eed, {".", ",", "."});
+convertRange(Eed, {"", ",", ""}) ->
+  convertRange(Eed, {"1", ",", "$"});
+convertRange(Eed, {A, "", ""}) ->
+  convertRange(Eed, {A, ",", A});
+convertRange(_Eed, {"", ",", _}) ->
+  {error, unknown()};
+convertRange(Eed, {A, ",", E}) ->
+  {getLineRef(Eed, A), getLineRef(Eed, E)}.
+
+commandSplit(Command) ->
+  {match,[[A,C,E,O], _]} = re:run(Command,"([[:digit:]]*)(,?)([[:digit:]]*)([[:alpha:]+-]?)",[global,{capture,all_but_first,list}]),
+  {A,C,E,O}.
 
 % [address [,address]]command[parameters] - from GNU Ed Manual
 runcmd(Eed, Command) ->
-  {match,[[A,C,E,O], _]} = re:run(Command,"([[:digit:]]*)(,?)([[:digit:]]*)([[:alpha:]+-]?)",[global,{capture,all_but_first,list}]),
+  {A,C,E,O} = commandSplit(Command),
 
-  Range = {A, C, E},
+  Range = {A,C,E},
+  NewRange = convertRange(Eed, Range),
 
   case O of
-    "q" -> {quit, ""};
-    "p" -> print(Eed, Range);
-    "a" -> append(Eed), {ok, ""};
-    "d" -> delete(Eed);
-    "+" -> setLineNumber(Eed, sendRecv(Eed, getLineNumber) + 1);
-    "-" -> setLineNumber(Eed, sendRecv(Eed, getLineNumber) - 1);
+    "q" -> quit(Eed, Range);
+    "p" -> print(Eed, NewRange);
+    "a" -> append(Eed, Range);
+    "d" -> delete(Eed, Range);
+    "+" -> incLine(Eed, Range);
+    "-" -> decLine(Eed, Range);
     _ -> setLineNumber(Eed, Range)
   end.
 
@@ -137,29 +166,31 @@ test() ->
   Eed = start(),
 
   ok = sendRecv(Eed, append, "asdf"),
-  {ok, "asdf"} = runcmd(Eed, "p"),
+  {ok, ["asdf"]} = runcmd(Eed, "p"),
   {ok, ["asdf"]} = runcmd(Eed, ",p"),
-  {ok, "asdf"} = runcmd(Eed, "1p"),
+  {ok, ["asdf"]} = runcmd(Eed, "1p"),
 
   ok = sendRecv(Eed, append, "1234"),
-  {ok, "1234"} = runcmd(Eed, "p"),
-  {ok, "1234"} = runcmd(Eed, "2p"),
+  {ok, ["1234"]} = runcmd(Eed, "p"),
+  {ok, ["1234"]} = runcmd(Eed, "2p"),
   
-  {ok, "asdf"} = runcmd(Eed, "1p"),
+  {ok, ["asdf"]} = runcmd(Eed, "1p"),
 
   {ok, ["asdf", "1234"]} = runcmd(Eed, ",p"),
-  {ok, "1234"} = runcmd(Eed, "2"),
+  {ok, ["1234"]} = runcmd(Eed, "2"),
+  {ok, ["asdf"]} = runcmd(Eed, "1,1p"),
+  {ok, ["1234"]} = runcmd(Eed, "2,2p"),
   %{ok, ["asdf", "1234"]} = runcmd(Eed, "1,2p"),
   
-  {ok, "1234"} = runcmd(Eed, "2"),
+  {ok, ["1234"]} = runcmd(Eed, "2"),
 
-  {ok, "asdf"} = runcmd(Eed, "-"),
-  {ok, "1234"} = runcmd(Eed, "+"),
+  {ok, ["asdf"]} = runcmd(Eed, "-"),
+  {ok, ["1234"]} = runcmd(Eed, "+"),
 
-  {ok, "asdf"} = runcmd(Eed, "1"),
+  {ok, ["asdf"]} = runcmd(Eed, "1"),
   {ok, ""} = runcmd(Eed, "d"),
 
-  {ok, "1234"} = runcmd(Eed, "p"),
+  {ok, ["1234"]} = runcmd(Eed, "p"),
   {ok, ["1234"]} = runcmd(Eed, ",p"),
 
   {ok, ""} = runcmd(Eed, "d"),
