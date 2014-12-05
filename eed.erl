@@ -104,8 +104,8 @@ print(Eed, A, E, validated) ->
 
 noCmd(Eed, Range, false) ->
   incLine(Eed, Range, false);
-noCmd(Eed, {A, E}, RangeGiven) ->
-  print(Eed, {A, E}, RangeGiven).
+noCmd(Eed, Range, RangeGiven) ->
+  print(Eed, Range, RangeGiven).
 
 quit(_Eed, _Range, false) ->
   {quit, ""};
@@ -122,6 +122,14 @@ getLineRef(Eed, ".") ->
   sendRecv(Eed, getLineNumber);
 getLineRef(Eed, "$") ->
   sendRecv(Eed, lineCount);
+getLineRef(Eed, [$+]) ->
+  sendRecv(Eed, getLineNumber) + 1;
+getLineRef(Eed, [$+ | Num]) ->
+  sendRecv(Eed, getLineNumber) + getnum(Num);
+getLineRef(Eed, [$-]) ->
+  sendRecv(Eed, getLineNumber) - 1;
+getLineRef(Eed, [$- | Num]) ->
+  sendRecv(Eed, getLineNumber) - getnum(Num);
 getLineRef(_Eed, Num) ->
   getnum(Num).
 
@@ -138,7 +146,7 @@ convertRange(Eed, {A, ",", E}) ->
 
 commandSplit(Command) ->
 % [address [,address]]command[parameters] - from GNU Ed Manual
-  {match,R} = re:run(Command,"([[:digit:].$]*)(,?)([[:digit:].$]*)([[:alpha:]+-]?)",[global,{capture,all_but_first,list}]),
+  {match,R} = re:run(Command,"([[:digit:].$+-]*)(,?)([[:digit:].$+-]*)([[:alpha:]]?)",[global,{capture,all_but_first,list}]),
   [A,C,E,O] = hd(R),
   {A,C,E,O}.
 
@@ -154,9 +162,7 @@ runcmd(Eed, Command) ->
     "p" -> print(Eed, NewRange, RangeGiven);
     "a" -> append(Eed, NewRange, RangeGiven);
     "d" -> delete(Eed, NewRange, RangeGiven);
-    "+" -> incLine(Eed, NewRange, RangeGiven);
-    "-" -> decLine(Eed, NewRange, RangeGiven);
-    _ -> noCmd(Eed, NewRange, RangeGiven)
+    "" -> noCmd(Eed, NewRange, RangeGiven)
   end.
 
 cmdloop(Eed) ->
