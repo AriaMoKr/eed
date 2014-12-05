@@ -40,7 +40,7 @@ sendRecv(Eed, Cmd, Arg) ->
     after 2000 -> timeout
   end.
 
-append(Eed, _Range) ->
+append(Eed, _Range, _RangeGiven) ->
   append(Eed).
 append(Eed) ->
   L = io:get_line(""),
@@ -65,10 +65,6 @@ getnum(String) ->
 linenumValid(Eed, Num) ->
   (Num > 0) and (Num =< sendRecv(Eed, lineCount)).
 
-setLineNumber(Eed, {"", _C, _E}) ->
-  setLineNumber(Eed, sendRecv(Eed, getLineNumber) + 1);
-setLineNumber(Eed, {A, _C, _E}) ->
-  setLineNumber(Eed, getnum(A));
 setLineNumber(Eed, Num) ->
   NumValid = linenumValid(Eed, Num),
   if NumValid -> sendRecv(Eed, setLineNumber, Num),
@@ -76,7 +72,7 @@ setLineNumber(Eed, Num) ->
      true -> {err, unknown()}
   end.
 
-delete(Eed, _Range) ->
+delete(Eed, _Range, _RangeGiven) ->
   delete(Eed).
 delete(Eed) ->
   NumValid = linenumValid(Eed, sendRecv(Eed, getLineNumber)),
@@ -84,14 +80,12 @@ delete(Eed) ->
      true -> {err, unknown()}
   end.
 
-print(Eed, {A, E}) ->
-  AValid = linenumValid(Eed, sendRecv(Eed, getLineNumber)),
-  EValid = linenumValid(Eed, sendRecv(Eed, getLineNumber)),
+print(Eed, {A, E}, _RangeGiven) ->
+  AValid = linenumValid(Eed, A),
+  EValid = linenumValid(Eed, E),
   if AValid, EValid, A =< E -> print(Eed, A, E, validated);
      true -> {error, unknown()}
-  end;
-print(Eed, A) ->
-  print(Eed, {A, A}).
+  end.
 
 print(Eed, A, A, validated) -> 
   setLineNumber(Eed, A),
@@ -101,15 +95,20 @@ print(Eed, A, E, validated) ->
   {ok, LinesB} = print(Eed, A+1, E, validated),
   {ok, LinesA ++ LinesB}.
 
-quit(_Eed, {"", "", ""}) ->
+noCmd(Eed, Range, false) ->
+  incLine(Eed, Range, false);
+noCmd(Eed, {A, E}, RangeGiven) ->
+  print(Eed, {A, E}, RangeGiven).
+
+quit(_Eed, _Range, false) ->
   {quit, ""};
-quit(_Eed, {_A, _C, _E}) ->
+quit(_Eed, _Range, true) ->
   {error, unknown()}.
 
-incLine(Eed, _Range) ->
+incLine(Eed, _Range, _RangeGiven) ->
   setLineNumber(Eed, sendRecv(Eed, getLineNumber) + 1).
 
-decLine(Eed, _Range) ->
+decLine(Eed, _Range, _RangeGiven) ->
   setLineNumber(Eed, sendRecv(Eed, getLineNumber) - 1).
 
 getLineRef(Eed, ".") ->
@@ -131,24 +130,26 @@ convertRange(Eed, {A, ",", E}) ->
   {getLineRef(Eed, A), getLineRef(Eed, E)}.
 
 commandSplit(Command) ->
-  {match,[[A,C,E,O], _]} = re:run(Command,"([[:digit:]]*)(,?)([[:digit:]]*)([[:alpha:]+-]?)",[global,{capture,all_but_first,list}]),
+% [address [,address]]command[parameters] - from GNU Ed Manual
+  {match,R} = re:run(Command,"([[:digit:].$]*)(,?)([[:digit:].$]*)([[:alpha:]+-]?)",[global,{capture,all_but_first,list}]),
+  [A,C,E,O] = hd(R),
   {A,C,E,O}.
 
-% [address [,address]]command[parameters] - from GNU Ed Manual
 runcmd(Eed, Command) ->
   {A,C,E,O} = commandSplit(Command),
+  NewRange = convertRange(Eed, {A,C,E}),
+  RangeGiven = {A,C,E} =/= {"","",""},
 
-  Range = {A,C,E},
-  NewRange = convertRange(Eed, Range),
+  io:format("~p~n", [{NewRange, RangeGiven}]),
 
   case O of
-    "q" -> quit(Eed, Range);
-    "p" -> print(Eed, NewRange);
-    "a" -> append(Eed, Range);
-    "d" -> delete(Eed, Range);
-    "+" -> incLine(Eed, Range);
-    "-" -> decLine(Eed, Range);
-    _ -> setLineNumber(Eed, Range)
+    "q" -> quit(Eed, NewRange, RangeGiven);
+    "p" -> print(Eed, NewRange, RangeGiven);
+    "a" -> append(Eed, NewRange, RangeGiven);
+    "d" -> delete(Eed, NewRange, RangeGiven);
+    "+" -> incLine(Eed, NewRange, RangeGiven);
+    "-" -> decLine(Eed, NewRange, RangeGiven);
+    _ -> noCmd(Eed, NewRange, RangeGiven)
   end.
 
 cmdloop(Eed) ->
@@ -171,7 +172,9 @@ test() ->
   {ok, ["asdf"]} = runcmd(Eed, "1p"),
 
   ok = sendRecv(Eed, append, "1234"),
-  {ok, ["1234"]} = runcmd(Eed, "p"),
+  {ok, ["asdf"]} = runcmd(Eed, "1"),
+  {ok, ["asdf"]} = runcmd(Eed, "p"),
+  {ok, ["1234"]} = runcmd(Eed, ""),
   {ok, ["1234"]} = runcmd(Eed, "2p"),
   
   {ok, ["asdf"]} = runcmd(Eed, "1p"),
@@ -180,25 +183,35 @@ test() ->
   {ok, ["1234"]} = runcmd(Eed, "2"),
   {ok, ["asdf"]} = runcmd(Eed, "1,1p"),
   {ok, ["1234"]} = runcmd(Eed, "2,2p"),
-  %{ok, ["asdf", "1234"]} = runcmd(Eed, "1,2p"),
+  {ok, ["asdf", "1234"]} = runcmd(Eed, "1,2p"),
   
   {ok, ["1234"]} = runcmd(Eed, "2"),
 
   {ok, ["asdf"]} = runcmd(Eed, "-"),
   {ok, ["1234"]} = runcmd(Eed, "+"),
+  {ok, ["asdf"]} = runcmd(Eed, "-"),
 
   {ok, ["asdf"]} = runcmd(Eed, "1"),
   {ok, ""} = runcmd(Eed, "d"),
 
   {ok, ["1234"]} = runcmd(Eed, "p"),
   {ok, ["1234"]} = runcmd(Eed, ",p"),
+  {error, _} = runcmd(Eed, ",5p"),
 
   {ok, ""} = runcmd(Eed, "d"),
 
   ok = sendRecv(Eed, append, "asdf"),
   ok = sendRecv(Eed, append, "1234"),
   ok = sendRecv(Eed, append, "zzzz"),
-  %{ok, ["1234", "zzzz"]} = runcmd(Eed, "2,3p"),
+  {ok, ["1234", "zzzz"]} = runcmd(Eed, "2,3p"),
+  {ok, ["zzzz"]} = runcmd(Eed, ".p"),
+  {ok, ["zzzz"]} = runcmd(Eed, ".,.p"),
+  {ok, ["asdf"]} = runcmd(Eed, "1"),
+  {ok, ["zzzz"]} = runcmd(Eed, "$p"),
+  {ok, ["asdf"]} = runcmd(Eed, "1"),
+  {ok, ["1234", "zzzz"]} = runcmd(Eed, "2,$p"),
+  {error, "?\n"} = runcmd(Eed, "0"),
+  {error, "?\n"} = runcmd(Eed, "4"),
 
   ok.
 
