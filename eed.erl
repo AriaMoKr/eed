@@ -72,13 +72,20 @@ setLineNumber(Eed, Num) ->
      true -> {err, unknown()}
   end.
 
-delete(Eed, _Range, _RangeGiven) ->
-  delete(Eed).
-delete(Eed) ->
-  NumValid = linenumValid(Eed, sendRecv(Eed, getLineNumber)),
-  if NumValid -> sendRecv(Eed, delete), {ok, ""};
-     true -> {err, unknown()}
+delete(Eed, {A, E}, _RangeGiven) ->
+  AValid = linenumValid(Eed, A),
+  EValid = linenumValid(Eed, E),
+  if AValid, EValid, A =< E -> delete(Eed, A, E, validated);
+     true -> {error, unknown()}
   end.
+delete(Eed, A, A, validated) -> 
+  setLineNumber(Eed, A),
+  ok = sendRecv(Eed, delete),
+  {ok, ""};
+delete(Eed, A, E, validated) ->
+  {ok, ""} = delete(Eed, A, A, validated),
+  {ok, ""} = delete(Eed, A+1, E, validated),
+  {ok, ""}.
 
 print(Eed, {A, E}, _RangeGiven) ->
   AValid = linenumValid(Eed, A),
@@ -140,7 +147,7 @@ runcmd(Eed, Command) ->
   NewRange = convertRange(Eed, {A,C,E}),
   RangeGiven = {A,C,E} =/= {"","",""},
 
-  io:format("~p~n", [{NewRange, RangeGiven}]),
+  %io:format("~p~n", [{NewRange, RangeGiven}]),
 
   case O of
     "q" -> quit(Eed, NewRange, RangeGiven);
@@ -168,50 +175,43 @@ test() ->
 
   ok = sendRecv(Eed, append, "asdf"),
   {ok, ["asdf"]} = runcmd(Eed, "p"),
-  {ok, ["asdf"]} = runcmd(Eed, ",p"),
-  {ok, ["asdf"]} = runcmd(Eed, "1p"),
-
   ok = sendRecv(Eed, append, "1234"),
+
   {ok, ["asdf"]} = runcmd(Eed, "1"),
-  {ok, ["asdf"]} = runcmd(Eed, "p"),
   {ok, ["1234"]} = runcmd(Eed, ""),
   {ok, ["1234"]} = runcmd(Eed, "2p"),
-  
-  {ok, ["asdf"]} = runcmd(Eed, "1p"),
-
   {ok, ["asdf", "1234"]} = runcmd(Eed, ",p"),
+
   {ok, ["1234"]} = runcmd(Eed, "2"),
   {ok, ["asdf"]} = runcmd(Eed, "1,1p"),
-  {ok, ["1234"]} = runcmd(Eed, "2,2p"),
   {ok, ["asdf", "1234"]} = runcmd(Eed, "1,2p"),
-  
-  {ok, ["1234"]} = runcmd(Eed, "2"),
-
   {ok, ["asdf"]} = runcmd(Eed, "-"),
   {ok, ["1234"]} = runcmd(Eed, "+"),
-  {ok, ["asdf"]} = runcmd(Eed, "-"),
 
   {ok, ["asdf"]} = runcmd(Eed, "1"),
   {ok, ""} = runcmd(Eed, "d"),
-
   {ok, ["1234"]} = runcmd(Eed, "p"),
   {ok, ["1234"]} = runcmd(Eed, ",p"),
   {error, _} = runcmd(Eed, ",5p"),
-
   {ok, ""} = runcmd(Eed, "d"),
+  {error, "?\n"} = runcmd(Eed, ",p"),
 
   ok = sendRecv(Eed, append, "asdf"),
   ok = sendRecv(Eed, append, "1234"),
   ok = sendRecv(Eed, append, "zzzz"),
   {ok, ["1234", "zzzz"]} = runcmd(Eed, "2,3p"),
   {ok, ["zzzz"]} = runcmd(Eed, ".p"),
+  {ok, ["zzzz"]} = runcmd(Eed, "."),
   {ok, ["zzzz"]} = runcmd(Eed, ".,.p"),
+
   {ok, ["asdf"]} = runcmd(Eed, "1"),
-  {ok, ["zzzz"]} = runcmd(Eed, "$p"),
-  {ok, ["asdf"]} = runcmd(Eed, "1"),
+  {ok, ["zzzz"]} = runcmd(Eed, "$"),
+
   {ok, ["1234", "zzzz"]} = runcmd(Eed, "2,$p"),
+  {ok, ""} = runcmd(Eed, "2,.d"),
+  {ok, ["asdf"]} = runcmd(Eed, ",p"),
   {error, "?\n"} = runcmd(Eed, "0"),
-  {error, "?\n"} = runcmd(Eed, "4"),
+  {error, "?\n"} = runcmd(Eed, "2"),
 
   ok.
 
