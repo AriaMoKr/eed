@@ -33,6 +33,22 @@ start() ->
   register(eedserver, E),
   E.
 
+serverAtom() ->
+  {ok, Host} = inet:gethostname(),
+  list_to_atom("eedserver@" ++ Host).
+
+startServer() ->
+  net_kernel:start([eedserver, shortnames]),
+  start().
+
+randomClientAtom() ->
+  random:seed(now()),
+  list_to_atom(lists:flatten(io_lib:format("eedclient-~p", [random:uniform(1000)]))).
+
+startClient() ->
+  net_kernel:start([randomClientAtom(), shortnames]),
+  cmdloop({eedserver, serverAtom()}).
+
 sendRecv(Eed, Cmd) ->
   sendRecv(Eed, Cmd, undef).
 sendRecv(Eed, Cmd, Arg) ->
