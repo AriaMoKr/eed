@@ -29,14 +29,16 @@ fileed(Lines, Cursor) ->
   end.
 
 start() ->
-  spawn(?MODULE, fileed, [[], 0]).
+  E = spawn(?MODULE, fileed, [[], 0]),
+  register(eedserver, E),
+  E.
 
 sendRecv(Eed, Cmd) ->
   sendRecv(Eed, Cmd, undef).
 sendRecv(Eed, Cmd, Arg) ->
   Eed ! {self(), {Cmd, Arg}},
   receive
-    {Eed, Msg} -> Msg
+    {_RealEed, Msg} -> Msg
     after 2000 -> timeout
   end.
 
@@ -75,7 +77,8 @@ setLineNumber(Eed, Num) ->
 delete(Eed, {A, E}, _RangeGiven) ->
   AValid = linenumValid(Eed, A),
   EValid = linenumValid(Eed, E),
-  if AValid, EValid, A =< E -> delete(Eed, A, E, validated);
+  if AValid, EValid, A =< E ->
+       delete(Eed, A, E, validated);
      true -> {error, unknown()}
   end.
 delete(Eed, A, A, validated) -> 
@@ -90,7 +93,8 @@ delete(Eed, A, E, validated) ->
 print(Eed, {A, E}, _RangeGiven) ->
   AValid = linenumValid(Eed, A),
   EValid = linenumValid(Eed, E),
-  if AValid, EValid, A =< E -> print(Eed, A, E, validated);
+  if AValid, EValid, A =< E ->
+       print(Eed, A, E, validated);
      true -> {error, unknown()}
   end.
 
@@ -104,8 +108,8 @@ print(Eed, A, E, validated) ->
 
 noCmd(Eed, Range, false) ->
   incLine(Eed, Range, false);
-noCmd(Eed, Range, RangeGiven) ->
-  print(Eed, Range, RangeGiven).
+noCmd(Eed, Range, true) ->
+  print(Eed, Range, true).
 
 quit(_Eed, _Range, false) ->
   {quit, ""};
@@ -148,12 +152,12 @@ commandSplit(Command) ->
 % [address [,address]]command[parameters] - from GNU Ed Manual
   {match,R} = re:run(Command,"([[:digit:].$+-]*)(,?)([[:digit:].$+-]*)([[:alpha:]]?)",[global,{capture,all_but_first,list}]),
   [A,C,E,O] = hd(R),
-  {A,C,E,O}.
+  {{A,C,E},O}.
 
 runcmd(Eed, Command) ->
-  {A,C,E,O} = commandSplit(Command),
-  NewRange = convertRange(Eed, {A,C,E}),
-  RangeGiven = {A,C,E} =/= {"","",""},
+  {ACERange,O} = commandSplit(Command),
+  NewRange = convertRange(Eed, ACERange),
+  RangeGiven = ACERange =/= {"","",""},
 
   %io:format("~p~n", [{NewRange, RangeGiven}]),
 
