@@ -1,1 +1,1 @@
-erl -run eed run -run init stop -noshell
+erl -run eed runStandalone -run init stop -noshell

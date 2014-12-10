@@ -28,25 +28,41 @@ fileed(Lines, Cursor) ->
     terminate -> ok
   end.
 
-start() ->
-  E = spawn(?MODULE, fileed, [[], 0]),
-  register(eedserver, E),
-  E.
+startServer() ->
+  Existing = whereis(eedserver),
+  if Existing /= undefined ->
+       Existing;
+     true ->
+       net_kernel:start([eedserver, shortnames]),
+       E = spawn(?MODULE, fileed, [[], 0]),
+       register(eedserver, E),
+       E
+  end.
+
+startStandalone() ->
+  spawn(?MODULE, fileed, [[], 0]).
+
+runStandalone() ->
+  E = startStandalone(),
+  cmdloop(E).
 
 serverAtom() ->
   {ok, Host} = inet:gethostname(),
   list_to_atom("eedserver@" ++ Host).
 
-startServer() ->
-  net_kernel:start([eedserver, shortnames]),
-  start().
-
 randomClientAtom() ->
   random:seed(now()),
   list_to_atom(lists:flatten(io_lib:format("eedclient-~p", [random:uniform(1000)]))).
 
-startClient() ->
+start() ->
   net_kernel:start([randomClientAtom(), shortnames]),
+  Server = net_kernel:connect(serverAtom()),
+  if not Server -> os:cmd("erl -run eed startServer -noshell &");
+    true -> ok
+  end.
+
+run() ->
+  start(),
   cmdloop({eedserver, serverAtom()}).
 
 sendRecv(Eed, Cmd) ->
@@ -192,12 +208,11 @@ cmdloop(Eed) ->
     true -> io:format("~s", [Msg]), cmdloop(Eed)
   end.
 
-run() ->
-  Eed = start(),
-  cmdloop(Eed).
-
 test() ->
-  Eed = start(),
+  start(),
+  %Eed = start(),
+  Eed = {eedserver, serverAtom()},
+  runcmd(Eed, ",d"),
 
   ok = sendRecv(Eed, append, "asdf"),
   {ok, ["asdf"]} = runcmd(Eed, "p"),
@@ -238,6 +253,8 @@ test() ->
   {ok, ["asdf"]} = runcmd(Eed, ",p"),
   {error, "?\n"} = runcmd(Eed, "0"),
   {error, "?\n"} = runcmd(Eed, "2"),
+
+  runcmd(Eed, ",d"),
 
   ok.
 
