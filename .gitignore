@@ -1,3 +1,5 @@
 *.beam
 .*.swp
 *.dump
+localhost.8080.*
+*.log
