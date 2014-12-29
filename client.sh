@@ -1,1 +1,1 @@
-erl -run eed run -run init stop -noshell
+erl -sname tempclient -run eed run -run init stop -noshell

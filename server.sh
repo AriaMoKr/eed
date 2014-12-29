@@ -1,1 +1,1 @@
-erl -run eed startServer
+erl -sname tempserver -run eed startServer
