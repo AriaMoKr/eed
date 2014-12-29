@@ -1,0 +1,16 @@
+<html>
+  <erl>
+    out(Args) -> 
+      Command = case yaws_api:getvar(Args, "command") of
+        {ok, Val} -> Val;
+        undefined -> undefined
+      end,
+      {ehtml, f("command entered: ~p~n", [Command])}.
+  </erl>
+  <form action="/" method="post">
+    command: <input type="text" name="command" id="command">
+  </form>
+  <script>
+    document.getElementById("command").focus();
+  </script>
+</html>
