@@ -1,0 +1,14 @@
+<html>
+  <body>
+    <canvas id="canvas" />
+    <script>
+      var canvas = document.getElementById("canvas");
+      canvas.width = 200;
+      canvas.height = 200;  
+      var c = canvas.getContext("2d");
+      <erl>
+        out(Args) -> {html, f("c.fillRect(0, 0, 20, 20)", [])}.
+      </erl>
+    </script>
+  </body>
+</html>
