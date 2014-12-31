@@ -1,7 +1,6 @@
 <erl>
   rects() -> f("{\"x\":~p,\"y\":~p,\"w\":~p,\"h\":~p}",
-               [20*random:uniform(10), 20*random:uniform(10), 20, 20]).
+               [20*(random:uniform(10)-1), 20*(random:uniform(10)-1), 20, 20]).
 
-  out(_Args) -> random:seed(now()),
-                {html, rects()}.
+  out(_Args) -> random:seed(now()), {html, main:rects()}.
 </erl>

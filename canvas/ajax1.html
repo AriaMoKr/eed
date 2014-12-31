@@ -3,10 +3,10 @@
     <canvas id="canvas"></canvas>
     <script>
       var req = new XMLHttpRequest();
+      var req2 = new XMLHttpRequest();
       var canvas = document.getElementById("canvas");
-      var blocksize = 20;
-      var gridcount = 10;
-      canvas.width = canvas.height = blocksize*gridcount;
+      var frames = 0;
+      var initialized = false;
       var c = canvas.getContext("2d");
       function getRndColor() {
           var r = 255*Math.random()|0,
@@ -19,20 +19,40 @@
           var rect = JSON.parse(req.responseText);
           c.fillStyle = getRndColor();
           c.fillRect(rect.x, rect.y, rect.w, rect.h);
+          frames++;
+          if(frames > 500) {
+            initialize(); 
+            frames = 0;
+          }
+        }
+      }
+      function stateChange2() {
+        if(req2.readyState == 4 && req2.status == 200) {
+          var init = JSON.parse(req2.responseText);
+          blocksize = init.blocksize;
+          gridcount = init.gridcount;
+          if(canvas.width != blocksize*gridcount ||
+            canvas.height != blocksize*gridcount) {
+            canvas.width = canvas.height = blocksize*gridcount;
+          }
+          initialized = true;
         }
       }
       function loadjson()
       {
-        req.onreadystatechange = stateChange;
-        req.open("GET","rect.yaws",true);
-        req.send();
+        if(initialized) {
+          req.onreadystatechange = stateChange;
+          req.open("GET","rect.yaws", true);
+          req.send();
+        }
       }
-      //loadjson();
+      function initialize() {
+        req2.onreadystatechange = stateChange2;
+        req2.open("GET", "init.yaws", true);
+        req2.send();
+      }
+      initialize();
       setInterval(loadjson, 0);
     </script>
   </body>
 </html>
-
-
-<!--
--->

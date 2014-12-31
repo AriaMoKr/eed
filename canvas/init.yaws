@@ -1,0 +1,3 @@
+<erl>
+  out(_Args) -> {html, main:initf()}.
+</erl>
