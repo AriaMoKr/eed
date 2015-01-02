@@ -12,3 +12,5 @@ rects() -> io_lib:format("{\"x\":~p,\"y\":~p,\"w\":~p,\"h\":~p}",
 initf() -> %"{\"blocksize\":20,\"gridcount\":20}".
   io_lib:format("{\"blocksize\":~p,\"gridcount\":~p}",
                 [blocksize(), gridcount()]).
+
+start() -> yaws:start_embedded(".", [{listen, {0,0,0,0}}, {port, 8080}], [{cache_refresh_secs, 0}]).
