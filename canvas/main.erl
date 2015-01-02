@@ -4,7 +4,7 @@
 blocksize() -> 50.
 gridcount() -> 10.
 
-rects() -> 
+rect() -> 
   random:seed(now()),
   io_lib:format("{\"x\":~p,\"y\":~p,\"w\":~p,\"h\":~p}",
   [blocksize()*(random:uniform(gridcount())-1),
