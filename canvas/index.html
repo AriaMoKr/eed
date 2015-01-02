@@ -25,6 +25,7 @@
             initialize(); 
             frames = 0;
           }
+          setTimeout(loadjson, 0);
         }
       }
       function stateChange2() {
@@ -53,7 +54,8 @@
         req2.send();
       }
       initialize();
-      setInterval(loadjson, 0);
+      //setInterval(loadjson, 0);
+      setTimeout(loadjson, 100);
     </script>
   </body>
 </html>
