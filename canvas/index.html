@@ -8,18 +8,14 @@
       var frames = 0;
       var initialized = false;
       var c = canvas.getContext("2d");
-      function getRndColor() {
-          var r = 255*Math.random()|0,
-              g = 255*Math.random()|0,
-              b = 255*Math.random()|0;
-          return 'rgb(' + r + ',' + g + ',' + b + ')';
-      }
       function stateChange() {
         if(req.readyState == 4 && req.status == 200) {
-          var rect = JSON.parse(req.responseText);
-          c.fillStyle = getRndColor();
-          c.clearRect(0, 0, canvas.width, canvas.height);
-          c.fillRect(rect.x, rect.y, rect.w, rect.h);
+          rects = JSON.parse(req.responseText);
+          for(r in rects) {
+            c.fillStyle = rects[r].color;
+            c.clearRect(0, 0, canvas.width, canvas.height);
+            c.fillRect(rects[r].x, rects[r].y, rects[r].w, rects[r].h);
+          }
           frames++;
           if(frames > 500) {
             initialize(); 
@@ -44,7 +40,7 @@
       {
         if(initialized) {
           req.onreadystatechange = stateChange;
-          req.open("GET","rect.yaws", true);
+          req.open("GET","rects.yaws", true);
           req.send();
         }
       }
